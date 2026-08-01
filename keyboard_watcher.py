@@ -19,7 +19,7 @@ from openrgb_window import ensure_parked, get_openrgb_hwnd, show_interactive
 # rather than the VID/PID prefix, because Windows can leave behind stale
 # "ghost" device-instance entries sharing the same VID/PID that intermittently
 # report misleading status and were masking the real device's true state.
-VERSION = "2"
+VERSION = "3"
 
 KEYBOARD_EXACT_DEVICE_ID = "USB\\VID_1532&PID_0266\\9&32FBD72&0&2"
 POLL_SECONDS = 1.5              # how often to check the keyboard's own connection status
@@ -62,13 +62,19 @@ def log(message):
 
 def kill_other_instances():
     current_pid = os.getpid()
+    try:
+        parent_pid = psutil.Process(current_pid).parent().pid
+    except (psutil.NoSuchProcess, AttributeError):
+        parent_pid = None
+
     for proc in psutil.process_iter(["pid", "name", "cmdline"]):
-        if proc.info["pid"] == current_pid:
+        pid = proc.info["pid"]
+        if pid in (current_pid, parent_pid):
             continue
         if not (proc.info.get("name") or "").lower().startswith("python"):
             continue
         if "keyboard_watcher.py" in (proc.info.get("cmdline") or []):
-            log(f"Killing duplicate watcher process {proc.info['pid']}.")
+            log(f"Killing duplicate watcher process {pid}.")
             try:
                 proc.kill()
             except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
