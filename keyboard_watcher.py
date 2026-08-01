@@ -30,7 +30,6 @@ RESCAN_TIMEOUT_SECONDS = 15     # hard cap fallback if we never see the "device 
 LOG_PATH = Path(__file__).parent / "watcher.log"
 LOG_MAX_BYTES = 1_000_000       # rotate once the log reaches ~1 MB
 LOG_BACKUP_COUNT = 3            # keep this many rotated backups (watcher.log.1, .2, .3)
-PID_PATH = Path(__file__).parent / "watcher.pid"
 
 RESCAN_AUTO_ID = "OpenRGBDialog.centralWidget.MainButtonsFrame.ButtonRescan"
 PROFILE_BOX_AUTO_ID = "OpenRGBDialog.centralWidget.MainButtonsFrame.ProfileBox"
@@ -62,16 +61,18 @@ def log(message):
 
 
 def kill_other_instances():
-    if PID_PATH.exists():
-        try:
-            old_pid = int(PID_PATH.read_text().strip())
-            proc = psutil.Process(old_pid)
-            log(f"Killing previous watcher process {old_pid}.")
-            proc.kill()
-            proc.wait(timeout=5)
-        except (ValueError, psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
-            pass
-    PID_PATH.write_text(str(os.getpid()))
+    current_pid = os.getpid()
+    for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+        if proc.info["pid"] == current_pid:
+            continue
+        if not (proc.info.get("name") or "").lower().startswith("python"):
+            continue
+        if "keyboard_watcher.py" in (proc.info.get("cmdline") or []):
+            log(f"Killing duplicate watcher process {proc.info['pid']}.")
+            try:
+                proc.kill()
+            except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
+                pass
 
 
 def wait_for_device_list_updated(timeout):
@@ -205,9 +206,3 @@ if __name__ == "__main__":
         log("Stopping watcher.")
     except Exception as e:
         log(f"Fatal error: {e!r}")
-    finally:
-        try:
-            if PID_PATH.exists() and PID_PATH.read_text().strip() == str(os.getpid()):
-                PID_PATH.unlink()
-        except OSError:
-            pass

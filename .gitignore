@@ -12,5 +12,3 @@ wheels/
 # Logs
 *.log
 
-# Runtime
-watcher.pid
