@@ -1,0 +1,13 @@
+[project]
+name = "keyboard-watcher"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "openrgb-python>=0.3.6",
+    "psutil>=7.2.2",
+    "pywin32>=312",
+    "pywinauto>=0.6.9",
+    "wmi>=1.5.1",
+]
