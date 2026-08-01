@@ -171,11 +171,8 @@ def keyboard_present(c):
 
 
 def main():
-    log("Startup: killing duplicates...")
     kill_other_instances()
-    log("Startup: connecting to WMI...")
     c = wmi.WMI()
-    log("Startup: checking keyboard state...")
     was_present = keyboard_present(c)
     log(f"Keyboard watcher v{VERSION} started. Initial state: {'present' if was_present else 'absent'}.")
 
