@@ -21,7 +21,7 @@ $Settings = New-ScheduledTaskSettingsSet `
     -ExecutionTimeLimit ([TimeSpan]::Zero)  # no time limit -- this runs indefinitely
 
 # Remove any existing registration of this task first, so this script can be
-# safely re-run to pick up changes (e.g. after updating main.py or this script).
+# safely re-run to pick up changes (e.g. after updating keyboard_watcher.py or this script).
 if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
     Write-Host "Existing task '$TaskName' found -- removing it before re-registering..."
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false

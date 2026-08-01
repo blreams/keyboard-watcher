@@ -3,4 +3,4 @@
 
 Set WshShell = CreateObject("WScript.Shell")
 WshShell.CurrentDirectory = "C:\Users\blreams\Documents\git\keyboard-watcher"
-WshShell.Run """C:\Users\blreams\.local\bin\uv.exe"" run main.py", 0, False
+WshShell.Run """C:\Users\blreams\.local\bin\uv.exe"" run keyboard_watcher.py", 0, True
