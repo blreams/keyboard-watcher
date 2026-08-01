@@ -48,7 +48,7 @@ The watcher expects OpenRGB to already be running. Configure OpenRGB to start at
 ## Running manually
 
 ```powershell
-uv run main.py
+uv run keyboard_watcher.py
 ```
 
 Logs are written to `watcher.log` in the project directory (auto-rotates at ~1 MB, keeps 3 backups).
@@ -69,7 +69,7 @@ uv run park_window.py  # send back off screen
 
 ## Configuration
 
-Key constants at the top of `main.py`:
+Key constants at the top of `keyboard_watcher.py`:
 
 | Constant | Default | Description |
 |---|---|---|

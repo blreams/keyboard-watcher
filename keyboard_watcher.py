@@ -1,4 +1,5 @@
 import logging
+import os
 import socket
 import struct
 import threading
@@ -6,10 +7,11 @@ import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+import psutil
 import wmi
 from pywinauto import Desktop
 
-from openrgb_window import ensure_parked, get_openrgb_hwnd
+from openrgb_window import ensure_parked, get_openrgb_hwnd, show_interactive
 
 # --- Configuration ---
 # Exact, known-stable device instance ID for the keyboard's composite USB
@@ -17,6 +19,8 @@ from openrgb_window import ensure_parked, get_openrgb_hwnd
 # rather than the VID/PID prefix, because Windows can leave behind stale
 # "ghost" device-instance entries sharing the same VID/PID that intermittently
 # report misleading status and were masking the real device's true state.
+VERSION = "2"
+
 KEYBOARD_EXACT_DEVICE_ID = "USB\\VID_1532&PID_0266\\9&32FBD72&0&2"
 POLL_SECONDS = 1.5              # how often to check the keyboard's own connection status
 SETTLE_SECONDS = 1.5            # let child interfaces finish enumerating after reconnect detected
@@ -26,9 +30,12 @@ RESCAN_TIMEOUT_SECONDS = 15     # hard cap fallback if we never see the "device 
 LOG_PATH = Path(__file__).parent / "watcher.log"
 LOG_MAX_BYTES = 1_000_000       # rotate once the log reaches ~1 MB
 LOG_BACKUP_COUNT = 3            # keep this many rotated backups (watcher.log.1, .2, .3)
+PID_PATH = Path(__file__).parent / "watcher.pid"
 
 RESCAN_AUTO_ID = "OpenRGBDialog.centralWidget.MainButtonsFrame.ButtonRescan"
+PROFILE_BOX_AUTO_ID = "OpenRGBDialog.centralWidget.MainButtonsFrame.ProfileBox"
 LOAD_PROFILE_AUTO_ID = "OpenRGBDialog.centralWidget.MainButtonsFrame.ButtonLoadProfile"
+PROFILE_NAME = "BlueKeyboard"
 
 OPENRGB_HOST = "127.0.0.1"
 OPENRGB_PORT = 6742
@@ -39,7 +46,7 @@ HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 
 _logger = logging.getLogger("keyboard_watcher")
 _logger.setLevel(logging.INFO)
-_formatter = logging.Formatter("[%(asctime)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+_formatter = logging.Formatter(f"[%(asctime)s v{VERSION}] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
 _file_handler = RotatingFileHandler(LOG_PATH, maxBytes=LOG_MAX_BYTES, backupCount=LOG_BACKUP_COUNT)
 _file_handler.setFormatter(_formatter)
@@ -52,6 +59,19 @@ _logger.addHandler(_console_handler)
 
 def log(message):
     _logger.info(message)
+
+
+def kill_other_instances():
+    if PID_PATH.exists():
+        try:
+            old_pid = int(PID_PATH.read_text().strip())
+            proc = psutil.Process(old_pid)
+            log(f"Killing previous watcher process {old_pid}.")
+            proc.kill()
+            proc.wait(timeout=5)
+        except (ValueError, psutil.NoSuchProcess, psutil.AccessDenied, psutil.TimeoutExpired):
+            pass
+    PID_PATH.write_text(str(os.getpid()))
 
 
 def wait_for_device_list_updated(timeout):
@@ -114,8 +134,19 @@ def reapply_profile():
     if not result.get("updated"):
         log("Warning: no rescan confirmation from OpenRGB SDK server; proceeding anyway.")
 
+    # Qt's UIA bridge doesn't implement SelectionItemPattern on ComboBox items,
+    # so we must bring the window on-screen to use real mouse coordinates.
+    show_interactive(hwnd)
+    time.sleep(0.3)
+    profile_box = window.child_window(auto_id=PROFILE_BOX_AUTO_ID, control_type="ComboBox")
+    profile_box.click_input()  # physically click to open the dropdown
+    time.sleep(0.3)
+    profile_box.child_window(title=PROFILE_NAME, control_type="ListItem").click_input()
+    log(f"Selected profile '{PROFILE_NAME}'.")
+
     window.child_window(auto_id=LOAD_PROFILE_AUTO_ID, control_type="Button").invoke()
     log("Profile reapplied.")
+    ensure_parked(hwnd)
 
 
 def keyboard_present(c):
@@ -133,9 +164,13 @@ def keyboard_present(c):
 
 
 def main():
+    log("Startup: killing duplicates...")
+    kill_other_instances()
+    log("Startup: connecting to WMI...")
     c = wmi.WMI()
+    log("Startup: checking keyboard state...")
     was_present = keyboard_present(c)
-    log(f"Keyboard watcher started. Initial state: {'present' if was_present else 'absent'}.")
+    log(f"Keyboard watcher v{VERSION} started. Initial state: {'present' if was_present else 'absent'}.")
 
     # Park OpenRGB's window right away, rather than leaving it visible until
     # the first reconnect event happens to trigger reapply_profile().
@@ -168,3 +203,11 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         log("Stopping watcher.")
+    except Exception as e:
+        log(f"Fatal error: {e!r}")
+    finally:
+        try:
+            if PID_PATH.exists() and PID_PATH.read_text().strip() == str(os.getpid()):
+                PID_PATH.unlink()
+        except OSError:
+            pass

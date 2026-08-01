@@ -90,4 +90,10 @@ def show_interactive(hwnd):
         win32con.SWP_NOZORDER,
     )
     win32gui.ShowWindow(hwnd, win32con.SW_SHOW)
-    win32gui.SetForegroundWindow(hwnd)
+    try:
+        win32gui.SetForegroundWindow(hwnd)
+    except Exception:
+        # SetForegroundWindow can fail/error spuriously due to Windows'
+        # foreground-lock restrictions; the window is already shown at this
+        # point regardless, so this is just a "bring to front" nicety.
+        pass
